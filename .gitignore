@@ -1,0 +1,55 @@
+# Build directories
+/build/
+/build-*/
+/cmake-build-*/
+/bin/
+/obj/
+/out/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# Autotools generated files
+aclocal.m4
+autom4te.cache/
+config.log
+config.status
+configure
+libtool
+m4/
+
+# Generic C/C++ build artifacts
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# Debugging and profiling files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+*.prof
+*.gcno
+*.gcda
+*.gcov
+*.gch
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
