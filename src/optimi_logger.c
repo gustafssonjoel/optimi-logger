@@ -7,8 +7,17 @@
 
 void optimi_logger_config_init_default(optimi_logger_config_t* config)
 {
-    (void)config;
-    /* TODO: initialize default config values. */
+    config->output_path = ".";
+    config->filename_prefix = "optimi";
+    config->timestamp_in_filename = 0;
+    config->min_level = OPTIMI_LOG_LEVEL_INFO;
+    config->enable_console = 1;
+    config->enable_file = 0;
+    config->enable_colors = 0;
+    config->queue_capacity = 256;
+    config->overflow_policy = OPTIMI_OVERFLOW_ERROR;
+    config->flush_mode = OPTIMI_FLUSH_MODE_IMMEDIATE;
+    config->flush_interval_ms = 500;
 }
 
 optimi_status_t optimi_logger_create(
