@@ -13,3 +13,13 @@ cleanly.
 - This behavior is supported by GCC and Clang in GNU extension mode.
 - If strict portability is required across compilers/modes, consider migrating
 	macros to the C23 form using `__VA_OPT__(,) __VA_ARGS__`.
+
+## Tests
+
+The repository includes header contract tests under `tests/`.
+
+Run them with:
+
+```bash
+make -C tests test
+```

@@ -39,6 +39,14 @@ m4/
 *.out
 *.app
 
+# Compiled test binaries
+/tests/test_optimi_logger_header
+/tests/test_optimi_logger_flushing
+/tests/test_optimi_logger_acceptance
+/tests/test_optimi_logger_config
+/tests/test_optimi_logger_threading
+/tests/test_optimi_logger_memory
+
 # Debugging and profiling files
 *.dSYM/
 *.su
