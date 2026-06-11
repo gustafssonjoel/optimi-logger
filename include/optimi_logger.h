@@ -33,7 +33,9 @@ typedef enum {
     /** Memory allocation failed. */
     OPTIMI_STATUS_ALLOCATION_FAILED,
     /** Internal error not covered by other status codes. */
-    OPTIMI_STATUS_INTERNAL_ERROR
+    OPTIMI_STATUS_INTERNAL_ERROR,
+    /** Feature exists in API but has not been implemented yet. */
+    OPTIMI_STATUS_UNIMPLEMENTED
 } optimi_status_t;
 
 /**
