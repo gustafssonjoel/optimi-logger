@@ -15,7 +15,7 @@ void optimi_logger_config_init_default(optimi_logger_config_t* config) {
     config->enable_console = 1;
     config->enable_file = 0;
     config->enable_colors = 0;
-    config->queue_size = 256;
+    config->queue_capacity = 256;
     config->overflow_policy = OPTIMI_OVERFLOW_ERROR;
     config->flush_mode = OPTIMI_FLUSH_MODE_IMMEDIATE;
     config->flush_interval_ms = 1000;

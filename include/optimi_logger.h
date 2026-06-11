@@ -101,8 +101,8 @@ typedef struct {
     int enable_file;
     /** If non-zero, apply ANSI colors to console output. */
     int enable_colors;
-    /** Capacity of message queue.*/
-    size_t queue_size;
+    /** Maximum number of messages the queue can hold.*/
+    size_t queue_capacity;
     /** Overflow strategy when queue_size is exhausted. */
     optimi_queue_overflow_policy_t overflow_policy;
     /** Flush policy for buffered data. */
