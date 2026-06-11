@@ -53,6 +53,9 @@ optimi_status_t optimi_logger_set_min_level(
     if (!logger) {
         return OPTIMI_STATUS_INVALID_ARGUMENT;
     }
+    if (logger->is_shutdown) {
+        return OPTIMI_STATUS_NOT_INITIALIZED;
+    }
     logger->config.min_level = min_level;
     return OPTIMI_STATUS_OK;
 }
@@ -101,12 +104,18 @@ optimi_status_t optimi_logger_logv(
     if (!logger || !format) {
         return OPTIMI_STATUS_INVALID_ARGUMENT;
     }
+    if (logger->is_shutdown) {
+        return OPTIMI_STATUS_NOT_INITIALIZED;
+    }
     return OPTIMI_STATUS_OK;
 }
 
 optimi_status_t optimi_logger_flush(optimi_logger_t* logger) {
     if (!logger) {
         return OPTIMI_STATUS_INVALID_ARGUMENT;
+    }
+    if (logger->is_shutdown) {
+        return OPTIMI_STATUS_NOT_INITIALIZED;
     }
     return OPTIMI_STATUS_OK;
 }
