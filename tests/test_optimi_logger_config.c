@@ -1,262 +1,340 @@
+#include <dirent.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "optimi_logger.h"
 
-typedef struct {
-    const char* id;
-    const char* title;
-    const char* objective;
-    const char* preconditions;
-    const char* actions;
-    const char* acceptance;
-} config_acceptance_case_t;
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
-static const config_acceptance_case_t g_cases[] = {
-    {
-        "CONFIG-001",
-        "overflow policy error blocks enqueue when full",
-        "Validate OPTIMI_OVERFLOW_ERROR behavior under queue saturation.",
-        "Logger created with OPTIMI_OVERFLOW_ERROR policy and small queue size.",
-        "Fill queue to capacity, then attempt one additional log call.",
-        "Log call returns OPTIMI_STATUS_QUEUE_FULL and message is not enqueued."
-    },
-    {
-        "CONFIG-002",
-        "overflow policy drop newest discards incoming message",
-        "Validate OPTIMI_OVERFLOW_DROP_NEWEST behavior under queue saturation.",
-        "Logger created with OPTIMI_OVERFLOW_DROP_NEWEST policy and small queue size.",
-        "Fill queue to capacity with labeled messages, then log a new message.",
-        "New message is dropped; older queued messages remain intact in order."
-    },
-    {
-        "CONFIG-003",
-        "overflow policy drop oldest evicts oldest message",
-        "Validate OPTIMI_OVERFLOW_DROP_OLDEST behavior under queue saturation.",
-        "Logger created with OPTIMI_OVERFLOW_DROP_OLDEST policy and small queue size.",
-        "Fill queue to capacity with labeled messages (M1, M2, ..., Mn), then log new message Mn+1.",
-        "Oldest message (M1) is evicted and new message (Mn+1) is accepted in queue."
-    },
-    {
-        "CONFIG-010",
-        "console output only mode",
-        "Verify logger operates correctly with only console output enabled.",
-        "Default config with enable_console=1, enable_file=0.",
-        "Create logger and log a message.",
-        "Message appears on console; no file is created."
-    },
-    {
-        "CONFIG-011",
-        "file output only mode",
-        "Verify logger operates correctly with only file output enabled.",
-        "Config with enable_console=0, enable_file=1, valid output_path.",
-        "Create logger and log a message.",
-        "Message appears in file; no console output is produced."
-    },
-    {
-        "CONFIG-012",
-        "console and file output combined",
-        "Verify logger outputs to both sinks when both are enabled.",
-        "Config with enable_console=1, enable_file=1, valid output_path.",
-        "Create logger and log a message.",
-        "Message appears on both console and in the output file."
-    },
-    {
-        "CONFIG-013",
-        "console output with ANSI colors enabled",
-        "Verify ANSI color codes are applied to console output when requested.",
-        "Config with enable_console=1, enable_colors=1.",
-        "Create logger and log messages at different levels (INFO, WARN, ERROR).",
-        "Console output contains ANSI escape sequences for level-based colors."
-    },
-    {
-        "CONFIG-014",
-        "console output with ANSI colors disabled",
-        "Verify ANSI color codes are omitted when explicitly disabled.",
-        "Config with enable_console=1, enable_colors=0.",
-        "Create logger and log messages at different levels (INFO, WARN, ERROR).",
-        "Console output contains no ANSI escape sequences; text is plain."
-    },
-    {
-        "CONFIG-015",
-        "both console and file with selective colors",
-        "Verify colors apply only to console when file output is also enabled.",
-        "Config with enable_console=1, enable_file=1, enable_colors=1.",
-        "Create logger, log message, inspect both console and file output.",
-        "Console output has ANSI colors; file output does not contain color codes."
-    },
-    {
-        "CONFIG-020",
-        "small queue size initialization",
-        "Verify logger can be created with minimal queue capacity.",
-        "Config with queue_size=1.",
-        "Create logger and attempt to enqueue messages.",
-        "Logger initializes successfully; behavior respects queue capacity constraint."
-    },
-    {
-        "CONFIG-021",
-        "large queue size initialization",
-        "Verify logger handles large queue allocations.",
-        "Config with queue_size=10000.",
-        "Create logger and verify available buffer space.",
-        "Logger initializes successfully and queue can accommodate all messages."
-    },
-    {
-        "CONFIG-022",
-        "zero queue size rejected",
-        "Verify invalid queue size is rejected at creation time.",
-        "Config with queue_size=0.",
-        "Call optimi_logger_create(&logger, &config).",
-        "Function returns OPTIMI_STATUS_INVALID_ARGUMENT."
-    },
-    {
-        "CONFIG-023",
-        "queue size interactions with overflow policy",
-        "Verify queue size and overflow policy work together correctly.",
-        "Config with small queue_size and specific overflow_policy.",
-        "Fill queue to capacity and attempt to exceed it.",
-        "Overflow policy behavior applies based on configured policy."
-    },
-    {
-        "CONFIG-030",
-        "flush mode immediate writes synchronously",
-        "Verify OPTIMI_FLUSH_MODE_IMMEDIATE causes immediate persistence.",
-        "Config with flush_mode=OPTIMI_FLUSH_MODE_IMMEDIATE and file output.",
-        "Log a message and read file without calling optimi_logger_flush().",
-        "Message is visible in output file immediately after log returns OK."
-    },
-    {
-        "CONFIG-031",
-        "flush mode balanced buffers with interval",
-        "Verify OPTIMI_FLUSH_MODE_BALANCED respects flush_interval_ms timing.",
-        "Config with flush_mode=OPTIMI_FLUSH_MODE_BALANCED, flush_interval_ms=1000.",
-        "Log message, inspect file immediately, wait for interval, inspect again.",
-        "Message is not visible immediately; becomes visible after interval elapses or explicit flush."
-    },
-    {
-        "CONFIG-032",
-        "flush interval milliseconds precision",
-        "Verify flush_interval_ms is honored within reasonable precision.",
-        "Config with flush_mode=OPTIMI_FLUSH_MODE_BALANCED, flush_interval_ms=100.",
-        "Log message and measure time to file visibility.",
-        "Message persists within approximately flush_interval_ms (±tolerance) of logging."
-    },
-    {
-        "CONFIG-040",
-        "output path directory creation",
-        "Verify logger handles output_path directory creation.",
-        "Config with output_path pointing to non-existent directory.",
-        "Create logger with enable_file=1.",
-        "Directory is created and file output succeeds."
-    },
-    {
-        "CONFIG-041",
-        "filename prefix applied to generated files",
-        "Verify filename_prefix is used in generated filenames.",
-        "Config with filename_prefix=\"myapp\" and output_path set.",
-        "Create logger with enable_file=1 and log a message.",
-        "Generated file has prefix \"myapp\" in its name."
-    },
-    {
-        "CONFIG-042",
-        "timestamp in filename when enabled",
-        "Verify date stamp is appended to filename when requested.",
-        "Config with timestamp_in_filename=1, filename_prefix=\"app\", output_path set.",
-        "Create logger and inspect generated filename.",
-        "Filename contains expected date pattern (YYYYMMDD) in addition to prefix."
-    },
-    {
-        "CONFIG-043",
-        "no timestamp in filename when disabled",
-        "Verify date stamp is omitted when not requested.",
-        "Config with timestamp_in_filename=0, filename_prefix=\"app\".",
-        "Create logger and inspect generated filename.",
-        "Filename contains prefix only; no date pattern is appended."
-    },
-    {
-        "CONFIG-044",
-        "output path with relative directory",
-        "Verify logger handles relative path output_path correctly.",
-        "Config with output_path=\"./logs\" (relative path).",
-        "Create logger with enable_file=1.",
-        "File is created relative to current working directory."
-    },
-    {
-        "CONFIG-045",
-        "output path with absolute directory",
-        "Verify logger handles absolute path output_path correctly.",
-        "Config with output_path=\"/tmp/mylogs\" (absolute path).",
-        "Create logger with enable_file=1.",
-        "File is created at the specified absolute path."
-    },
-    {
-        "CONFIG-050",
-        "invalid min level rejected",
-        "Verify invalid log level is handled at creation.",
-        "Config with min_level set to value outside valid enum range.",
-        "Call optimi_logger_create(&logger, &config).",
-        "Function returns OPTIMI_STATUS_INVALID_ARGUMENT."
-    },
-    {
-        "CONFIG-051",
-        "NULL output path with file output enabled",
-        "Verify NULL output_path is rejected when file output is enabled.",
-        "Config with output_path=NULL, enable_file=1.",
-        "Call optimi_logger_create(&logger, &config).",
-        "Function returns OPTIMI_STATUS_INVALID_ARGUMENT."
-    },
-    {
-        "CONFIG-052",
-        "NULL filename prefix with file output enabled",
-        "Verify NULL filename_prefix is rejected when file output is enabled.",
-        "Config with filename_prefix=NULL, enable_file=1, valid output_path.",
-        "Call optimi_logger_create(&logger, &config).",
-        "Function returns OPTIMI_STATUS_INVALID_ARGUMENT."
-    },
-    {
-        "CONFIG-053",
-        "empty filename prefix rejected",
-        "Verify empty string filename_prefix is rejected.",
-        "Config with filename_prefix=\"\", enable_file=1.",
-        "Call optimi_logger_create(&logger, &config).",
-        "Function returns OPTIMI_STATUS_INVALID_ARGUMENT."
-    },
-    {
-        "CONFIG-054",
-        "inaccessible output path rejected",
-        "Verify creation fails gracefully when output_path is not writable.",
-        "Config with output_path pointing to read-only directory.",
-        "Call optimi_logger_create(&logger, &config).",
-        "Function returns OPTIMI_STATUS_IO_ERROR."
-    },
-    {
-        "CONFIG-055",
-        "invalid overflow policy rejected",
-        "Verify invalid overflow policy enum value is handled.",
-        "Config with overflow_policy set to value outside valid enum range.",
-        "Call optimi_logger_create(&logger, &config).",
-        "Function returns OPTIMI_STATUS_INVALID_ARGUMENT."
-    },
-};
+#define CHECK(cond) do { \
+    if (!(cond)) { \
+        fprintf(stderr, "    check failed: %s (line %d)\n", #cond, __LINE__); \
+        return 1; \
+    } \
+} while (0)
 
-static void print_case(const config_acceptance_case_t* test_case) {
-    printf("[PENDING] %s - %s\n", test_case->id, test_case->title);
-    printf("  Objective: %s\n", test_case->objective);
-    printf("  Preconditions: %s\n", test_case->preconditions);
-    printf("  Actions: %s\n", test_case->actions);
-    printf("  Acceptance: %s\n", test_case->acceptance);
-}
+static int create_temp_dir(char* out_path, size_t out_path_size)
+{
+    char template_path[] = "/tmp/optimi_logger_config_XXXXXX";
+    char* created = mkdtemp(template_path);
 
-int main(void) {
-    size_t i;
-
-    (void)sizeof(optimi_logger_config_t);
-    (void)sizeof(optimi_status_t);
-
-    puts("Configuration test definitions (implementation pending):");
-    for (i = 0; i < sizeof(g_cases) / sizeof(g_cases[0]); ++i) {
-        print_case(&g_cases[i]);
+    if (created == NULL) {
+        return -1;
     }
 
-    printf("\nSummary: %zu defined, %d executed\n", sizeof(g_cases) / sizeof(g_cases[0]), 0);
+    if (strlen(created) + 1U > out_path_size) {
+        return -1;
+    }
+
+    strcpy(out_path, created);
     return 0;
+}
+
+static int remove_directory_files(const char* dir_path)
+{
+    DIR* dir;
+    struct dirent* entry;
+    char file_path[PATH_MAX];
+
+    dir = opendir(dir_path);
+    if (dir == NULL) {
+        return -1;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, entry->d_name);
+        if (remove(file_path) != 0) {
+            closedir(dir);
+            return -1;
+        }
+    }
+
+    closedir(dir);
+    return rmdir(dir_path);
+}
+
+static int find_log_file(const char* dir_path, const char* prefix, char* out_path, size_t out_path_size)
+{
+    DIR* dir;
+    struct dirent* entry;
+    size_t prefix_len = strlen(prefix);
+
+    dir = opendir(dir_path);
+    if (dir == NULL) {
+        return -1;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        size_t name_len;
+
+        if (entry->d_name[0] == '.') {
+            continue;
+        }
+
+        name_len = strlen(entry->d_name);
+        if (name_len < prefix_len + 4U) {
+            continue;
+        }
+
+        if (strncmp(entry->d_name, prefix, prefix_len) != 0) {
+            continue;
+        }
+
+        if (strcmp(entry->d_name + (name_len - 4U), ".log") != 0) {
+            continue;
+        }
+
+        snprintf(out_path, out_path_size, "%s/%s", dir_path, entry->d_name);
+        closedir(dir);
+        return 0;
+    }
+
+    closedir(dir);
+    return -1;
+}
+
+static int file_contains_text(const char* file_path, const char* needle)
+{
+    FILE* file;
+    char buffer[8192];
+    size_t bytes;
+
+    file = fopen(file_path, "r");
+    if (file == NULL) {
+        return 0;
+    }
+
+    bytes = fread(buffer, 1U, sizeof(buffer) - 1U, file);
+    buffer[bytes] = '\0';
+    fclose(file);
+
+    return strstr(buffer, needle) != NULL;
+}
+
+static int test_invalid_basic_config_is_rejected(void)
+{
+    optimi_logger_config_t config;
+    optimi_logger_t* logger = NULL;
+
+    optimi_logger_config_init_default(&config);
+
+    config.queue_capacity = 0;
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_INVALID_ARGUMENT);
+
+    optimi_logger_config_init_default(&config);
+    config.min_level = (optimi_log_level_t)99;
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_INVALID_ARGUMENT);
+
+    optimi_logger_config_init_default(&config);
+    config.overflow_policy = (optimi_queue_overflow_policy_t)99;
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_INVALID_ARGUMENT);
+
+    optimi_logger_config_init_default(&config);
+    config.flush_mode = (optimi_flush_mode_t)99;
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_INVALID_ARGUMENT);
+
+    return 0;
+}
+
+static int test_invalid_file_config_is_rejected(void)
+{
+    optimi_logger_config_t config;
+    optimi_logger_t* logger = NULL;
+
+    optimi_logger_config_init_default(&config);
+    config.enable_file = 1;
+    config.enable_console = 0;
+    config.output_path = NULL;
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_INVALID_ARGUMENT);
+
+    optimi_logger_config_init_default(&config);
+    config.enable_file = 1;
+    config.enable_console = 0;
+    config.filename_prefix = NULL;
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_INVALID_ARGUMENT);
+
+    optimi_logger_config_init_default(&config);
+    config.enable_file = 1;
+    config.enable_console = 0;
+    config.filename_prefix = "";
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_INVALID_ARGUMENT);
+
+    return 0;
+}
+
+static int test_relative_output_path_creates_file(void)
+{
+    optimi_logger_config_t config;
+    optimi_logger_t* logger = NULL;
+    char dir_path[PATH_MAX];
+    char file_path[PATH_MAX];
+
+    CHECK(create_temp_dir(dir_path, sizeof(dir_path)) == 0);
+
+    optimi_logger_config_init_default(&config);
+    config.enable_console = 0;
+    config.enable_file = 1;
+    config.output_path = dir_path;
+    config.filename_prefix = "cfg_relative";
+
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_log(logger, OPTIMI_LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "config-path") == OPTIMI_STATUS_OK);
+    CHECK(find_log_file(dir_path, "cfg_relative", file_path, sizeof(file_path)) == 0);
+    CHECK(file_contains_text(file_path, "config-path"));
+
+    optimi_logger_destroy(logger);
+    CHECK(remove_directory_files(dir_path) == 0);
+    return 0;
+}
+
+static int test_timestamp_filename_behavior(void)
+{
+    optimi_logger_config_t config;
+    optimi_logger_t* logger = NULL;
+    char dir_path[PATH_MAX];
+    char file_path[PATH_MAX];
+    const char* base_name;
+
+    CHECK(create_temp_dir(dir_path, sizeof(dir_path)) == 0);
+
+    optimi_logger_config_init_default(&config);
+    config.enable_console = 0;
+    config.enable_file = 1;
+    config.output_path = dir_path;
+    config.filename_prefix = "cfg_stamp";
+    config.timestamp_in_filename = 1;
+
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_log(logger, OPTIMI_LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "stamp") == OPTIMI_STATUS_OK);
+    CHECK(find_log_file(dir_path, "cfg_stamp", file_path, sizeof(file_path)) == 0);
+
+    base_name = strrchr(file_path, '/');
+    base_name = (base_name == NULL) ? file_path : base_name + 1;
+    CHECK(strstr(base_name, "cfg_stamp_") == base_name);
+
+    optimi_logger_destroy(logger);
+    CHECK(remove_directory_files(dir_path) == 0);
+    return 0;
+}
+
+static int test_overflow_error_policy_returns_queue_full(void)
+{
+    optimi_logger_config_t config;
+    optimi_logger_t* logger = NULL;
+
+    optimi_logger_config_init_default(&config);
+    config.enable_console = 0;
+    config.enable_file = 0;
+    config.queue_capacity = 1;
+    config.overflow_policy = OPTIMI_OVERFLOW_ERROR;
+    config.flush_mode = OPTIMI_FLUSH_MODE_BALANCED;
+    config.flush_interval_ms = 60000;
+
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_log(logger, OPTIMI_LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "first") == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_log(logger, OPTIMI_LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "second") == OPTIMI_STATUS_QUEUE_FULL);
+
+    optimi_logger_destroy(logger);
+    return 0;
+}
+
+static int test_overflow_drop_policies_are_applied(void)
+{
+    optimi_logger_config_t config;
+    optimi_logger_t* logger = NULL;
+    char dir_path[PATH_MAX];
+    char file_path[PATH_MAX];
+
+    CHECK(create_temp_dir(dir_path, sizeof(dir_path)) == 0);
+
+    optimi_logger_config_init_default(&config);
+    config.enable_console = 0;
+    config.enable_file = 1;
+    config.output_path = dir_path;
+    config.filename_prefix = "cfg_drop";
+    config.queue_capacity = 1;
+    config.flush_mode = OPTIMI_FLUSH_MODE_BALANCED;
+    config.flush_interval_ms = 60000;
+    config.overflow_policy = OPTIMI_OVERFLOW_DROP_NEWEST;
+
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_log(logger, OPTIMI_LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "keep-oldest") == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_log(logger, OPTIMI_LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "drop-newest") == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_flush(logger) == OPTIMI_STATUS_OK);
+    CHECK(find_log_file(dir_path, "cfg_drop", file_path, sizeof(file_path)) == 0);
+    CHECK(file_contains_text(file_path, "keep-oldest"));
+    CHECK(!file_contains_text(file_path, "drop-newest"));
+    optimi_logger_destroy(logger);
+
+    CHECK(remove(file_path) == 0);
+
+    optimi_logger_config_init_default(&config);
+    config.enable_console = 0;
+    config.enable_file = 1;
+    config.output_path = dir_path;
+    config.filename_prefix = "cfg_drop";
+    config.queue_capacity = 1;
+    config.flush_mode = OPTIMI_FLUSH_MODE_BALANCED;
+    config.flush_interval_ms = 60000;
+    config.overflow_policy = OPTIMI_OVERFLOW_DROP_OLDEST;
+
+    CHECK(optimi_logger_create(&logger, &config) == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_log(logger, OPTIMI_LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "drop-oldest") == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_log(logger, OPTIMI_LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "keep-newest") == OPTIMI_STATUS_OK);
+    CHECK(optimi_logger_flush(logger) == OPTIMI_STATUS_OK);
+    CHECK(find_log_file(dir_path, "cfg_drop", file_path, sizeof(file_path)) == 0);
+    CHECK(!file_contains_text(file_path, "drop-oldest"));
+    CHECK(file_contains_text(file_path, "keep-newest"));
+
+    optimi_logger_destroy(logger);
+    CHECK(remove_directory_files(dir_path) == 0);
+    return 0;
+}
+
+typedef int (*test_fn_t)(void);
+
+typedef struct {
+    const char* name;
+    test_fn_t fn;
+} test_case_t;
+
+int main(void)
+{
+    size_t i;
+    int failed = 0;
+    test_case_t tests[] = {
+        {"invalid basic config rejected", test_invalid_basic_config_is_rejected},
+        {"invalid file config rejected", test_invalid_file_config_is_rejected},
+        {"relative output path creates file", test_relative_output_path_creates_file},
+        {"timestamp filename behavior", test_timestamp_filename_behavior},
+        {"overflow error returns queue full", test_overflow_error_policy_returns_queue_full},
+        {"overflow drop policies", test_overflow_drop_policies_are_applied}
+    };
+
+    printf("Configuration integration tests:\n\n");
+
+    for (i = 0; i < sizeof(tests) / sizeof(tests[0]); ++i) {
+        int rc = tests[i].fn();
+        if (rc == 0) {
+            printf("[PASS] %s\n", tests[i].name);
+        } else {
+            printf("[FAIL] %s\n", tests[i].name);
+            failed++;
+        }
+    }
+
+    printf("\nSummary: %zu run, %d failed\n", sizeof(tests) / sizeof(tests[0]), failed);
+    return failed == 0 ? 0 : 1;
 }
