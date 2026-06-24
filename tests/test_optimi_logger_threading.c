@@ -49,7 +49,7 @@ static int test_concurrent_logging(void) {
 
     optimi_logger_config_init_default(&config);
     config.queue_capacity = 1000;
-    config.enable_console = 1;
+    config.enable_console = 0;
     config.enable_file = 0;
 
     if (optimi_logger_create(&logger, &config) != OPTIMI_STATUS_OK) {
