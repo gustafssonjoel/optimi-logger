@@ -102,14 +102,14 @@ static int test_queue_memory_scaling(void) {
     config.enable_file = 0;
 
     /* Small queue */
-    config.queue_size = 10;
+    config.queue_capacity = 10;
     if (optimi_logger_create(&logger_small, &config) != OPTIMI_STATUS_OK) {
         printf("  FAIL: Small logger creation failed\n");
         return 1;
     }
 
     /* Large queue */
-    config.queue_size = 1000;
+    config.queue_capacity = 1000;
     if (optimi_logger_create(&logger_large, &config) != OPTIMI_STATUS_OK) {
         printf("  FAIL: Large logger creation failed\n");
         optimi_logger_destroy(logger_small);
@@ -137,7 +137,7 @@ static int test_repeated_logging(void) {
     optimi_logger_config_init_default(&config);
     config.enable_console = 0;
     config.enable_file = 0;
-    config.queue_size = 50;
+    config.queue_capacity = 50;
 
     if (optimi_logger_create(&logger, &config) != OPTIMI_STATUS_OK) {
         printf("  FAIL: Logger creation failed\n");

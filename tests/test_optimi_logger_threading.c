@@ -48,7 +48,7 @@ static int test_concurrent_logging(void) {
     printf("[TEST] Concurrent logging from %d threads\n", NUM_THREADS);
 
     optimi_logger_config_init_default(&config);
-    config.queue_size = 1000;
+    config.queue_capacity = 1000;
     config.enable_console = 1;
     config.enable_file = 0;
 
@@ -100,7 +100,7 @@ static int test_concurrent_level_updates(void) {
     printf("[TEST] Concurrent level updates\n");
 
     optimi_logger_config_init_default(&config);
-    config.queue_size = 500;
+    config.queue_capacity = 500;
     config.enable_console = 0;
     config.enable_file = 0;
 
