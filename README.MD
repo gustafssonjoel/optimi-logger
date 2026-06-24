@@ -23,3 +23,21 @@ Run them with:
 ```bash
 make -C tests test
 ```
+
+## Example Application
+
+Build the full-feature demo application:
+
+```bash
+make example
+```
+
+Run it:
+
+```bash
+./build/all_features_demo
+```
+
+The demo enables console and file logging, ANSI colors, timestamped filenames,
+balanced flushing, queue overflow policies, runtime min-level changes,
+multithreaded logging, manual flushing, and all shutdown modes.
